@@ -1,33 +1,45 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Google.Cloud.Vision.V1;
 
 namespace Volpara_API.Controllers;
+using System.Text;
 
 [ApiController]
-[Route("[controller]")]
-public class WeatherForecastController : ControllerBase
+[Route("api/[controller]")]
+public class FaceDetectionController : ControllerBase
 {
-    private static readonly string[] Summaries = new[]
-    {
-        "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-    };
+    private readonly ILogger<FaceDetectionController> _logger;
 
-    private readonly ILogger<WeatherForecastController> _logger;
-
-    public WeatherForecastController(ILogger<WeatherForecastController> logger)
+    public FaceDetectionController(ILogger<FaceDetectionController> logger)
     {
         _logger = logger;
     }
 
-    [HttpGet(Name = "GetWeatherForecast")]
-    public IEnumerable<WeatherForecast> Get()
+    [HttpPost]
+    public IEnumerable<string> Post([FromBody] List<string> imageStrings)
     {
-        return Enumerable.Range(1, 5).Select(index => new WeatherForecast
+        var confidenceLevels = new List<string>();
+        var client = ImageAnnotatorClient.Create();
+        foreach (var imageString in imageStrings)
         {
-            Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            TemperatureC = Random.Shared.Next(-20, 55),
-            Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-        })
-        .ToArray();
+            var stringBuilder = new StringBuilder();
+            var image = GetImage(imageString);
+            var result = client.DetectFaces(image);
+            foreach (var face in result)
+            {
+                string poly = string.Join(" - ", face.BoundingPoly.Vertices.Select(v => $"({v.X}, {v.Y})"));
+                stringBuilder.Append($"Confidence: {(int)(face.DetectionConfidence * 100)}%; BoundingPoly: {poly}");
+            }
+            confidenceLevels.Add(stringBuilder.ToString());
+        }
+
+        return confidenceLevels.AsEnumerable();
+    }
+
+    private Image GetImage(string imageString)
+    {
+        var bytes = Convert.FromBase64String(imageString);
+        return Image.FromBytes(bytes);
     }
 }
 
